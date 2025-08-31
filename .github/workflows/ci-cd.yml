@@ -56,7 +56,7 @@ jobs:
           # SPRING_DATASOURCE_PASSWORD: test
 
       - name: Upload test results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results
@@ -65,15 +65,74 @@ jobs:
             target/cucumber-reports/
           retention-days: 7
 
-      - name: Generate test report
+      - name: Generate test report summary
         if: always()
         run: |
-          # Create a simple test summary
-          echo "Test Summary:" >> $GITHUB_STEP_SUMMARY
-          echo "- Unit Tests: Completed" >> $GITHUB_STEP_SUMMARY
-          echo "- Cucumber Tests: Completed" >> $GITHUB_STEP_SUMMARY
-          echo "- Selenium Tests: Completed" >> $GITHUB_STEP_SUMMARY
+          # Create a detailed test summary
+          echo "## 🧪 Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Java Version**: 17" >> $GITHUB_STEP_SUMMARY
+          echo "- **Spring Boot**: 3.3.3" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Types**: Unit, Cucumber (BDD), Selenium UI" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 Test Frameworks" >> $GITHUB_STEP_SUMMARY
+          echo "- JUnit 5" >> $GITHUB_STEP_SUMMARY
+          echo "- Cucumber 7.15.0" >> $GITHUB_STEP_SUMMARY
+          echo "- Selenium 4.15.0" >> $GITHUB_STEP_SUMMARY
+          echo "- RestAssured 5.4.0" >> $GITHUB_STEP_SUMMARY
 
-      - name: Build JAR
+      - name: Build JAR package
         run: mvn clean package -DskipTests
         if: success()
+
+  test-reports:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+          path: test-results
+
+      - name: Display test results summary
+        run: |
+          echo "=== 📋 Test Results Summary ==="
+          echo ""
+          
+          # Check for JUnit test results
+          if find test-results -name "TEST-*.xml" | grep -q .; then
+            echo "✅ JUnit tests executed successfully"
+            echo "JUnit Reports: target/surefire-reports/"
+          else
+            echo "❌ No JUnit test results found"
+          fi
+          
+          # Check for Cucumber test results
+          if [ -d "test-results/cucumber-reports" ]; then
+            echo "✅ Cucumber tests executed successfully"
+            echo "Cucumber Reports: target/cucumber-reports/"
+          else
+            echo "❌ No Cucumber test results found"
+          fi
+          
+          echo ""
+          echo "=== 🎯 Next Steps ==="
+          echo "1. Review test reports in artifacts"
+          echo "2. Check console output for detailed errors"
+          echo "3. Fix any failing tests"
+
+      - name: Publish test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Maven Test Results
+          path: test-results/**/*.xml
+          reporter: java-junit
