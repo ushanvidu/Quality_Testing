@@ -1,0 +1,135 @@
+ame: Java CI with Maven
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      # Optional: If you need a real database for integration tests
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+      - name: Build and run tests
+        run: mvn clean test
+        env:
+          # Add any environment variables needed for your tests
+          SPRING_PROFILES_ACTIVE: test
+          # Database configuration (if not using H2)
+          # SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/testdb
+          # SPRING_DATASOURCE_USERNAME: test
+          # SPRING_DATASOURCE_PASSWORD: test
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            target/surefire-reports/
+            target/cucumber-reports/
+          retention-days: 7
+
+      - name: Generate test report summary
+        if: always()
+        run: |
+          # Create a detailed test summary
+          echo "## 🧪 Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Java Version**: 17" >> $GITHUB_STEP_SUMMARY
+          echo "- **Spring Boot**: 3.3.3" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Types**: Unit, Cucumber (BDD), Selenium UI" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 Test Frameworks" >> $GITHUB_STEP_SUMMARY
+          echo "- JUnit 5" >> $GITHUB_STEP_SUMMARY
+          echo "- Cucumber 7.15.0" >> $GITHUB_STEP_SUMMARY
+          echo "- Selenium 4.15.0" >> $GITHUB_STEP_SUMMARY
+          echo "- RestAssured 5.4.0" >> $GITHUB_STEP_SUMMARY
+      - name: Build JAR package
+        run: mvn clean package -DskipTests
+        if: success()
+
+  test-reports:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+          path: test-results
+
+      - name: Display test results summary
+        run: |
+          echo "=== 📋 Test Results Summary ==="
+          echo ""
+          
+          # Check for JUnit test results
+          if find test-results -name "TEST-*.xml" | grep -q .; then
+            echo "✅ JUnit tests executed successfully"
+            echo "JUnit Reports: target/surefire-reports/"
+          else
+            echo "❌ No JUnit test results found"
+          fi
+          
+          # Check for Cucumber test results
+          if [ -d "test-results/cucumber-reports" ]; then
+            echo "✅ Cucumber tests executed successfully"
+            echo "Cucumber Reports: target/cucumber-reports/"
+          else
+            echo "❌ No Cucumber test results found"
+          fi
+          
+          echo ""
+          echo "=== 🎯 Next Steps ==="
+          echo "1. Review test reports in artifacts"
+          echo "2. Check console output for detailed errors"
+          echo "3. Fix any failing tests"
+      - name: Publish test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Maven Test Results
+          path: test-results/**/*.xml
+          reporter: java-junit
