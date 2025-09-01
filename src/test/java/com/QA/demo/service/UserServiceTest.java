@@ -31,6 +31,8 @@ public class UserServiceTest {
         testUser = new User(1L, "John Doe", "john.doe@example.com", 30);
     }
 
+
+    //grren test
     @Test
     void createUser_ShouldReturnSavedUser_WhenEmailIsUnique() {
         // Arrange
@@ -48,6 +50,8 @@ public class UserServiceTest {
         verify(userRepository, times(1)).save(testUser);
         // Remove the findByEmail verification since it's not used in createUser
     }
+
+    //red test
 
     @Test
     void createUser_ShouldThrowException_WhenEmailAlreadyExists() {
